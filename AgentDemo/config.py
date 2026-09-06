@@ -6,6 +6,46 @@ Students: this is the file to experiment with before touching anything else.
 """
 
 # ---------------------------------------------------------------------------
+# THE MISSION (Module 1) — who the agent serves and what it optimizes.
+# This is the "architectural intent": WHO the agent is for, WHAT it decides,
+# and HOW leadership priorities become concrete numeric weights the scoring
+# tool obeys. Nothing here is "AI"; it is the design contract the rest of the
+# code follows.
+# ---------------------------------------------------------------------------
+AGENT_GOAL = (
+    "For any candidate data-center site, forecast whether it is a strong choice, "
+    "when the build could realistically finish, and what could go wrong -- then "
+    "rank the sites with their risks."
+)
+INTENDED_USER = "Leadership team of a cloud data-center business (executive decision-makers)."
+
+# Leadership priorities. Each weight says how much a criterion contributes to a
+# site's final 0-100 score. Re-weight these and the ranking shifts instantly --
+# that is leadership saying "power matters more than permitting" in numbers.
+# They MUST sum to 1.0. The scoring tool (course_server.py) imports these.
+#
+# ---- MODIFY HERE ----
+CRITERION_WEIGHTS = {
+    "power":        0.35,   # cheap, high-capacity, short-queue power
+    "connectivity": 0.20,   # low latency / closeness to customers
+    "hazard":       0.25,   # low flood / seismic / storm risk
+    "permitting":   0.20,   # incentives, low complexity, water available
+}
+
+# Construction / cooling / fit-out floor in months, BEFORE the grid gates it.
+# The scoring tool adds each site's interconnection queue on top of this.
+BASE_BUILD_MONTHS = 18
+
+
+def validate_weights():
+    total = round(sum(CRITERION_WEIGHTS.values()), 6)
+    assert total == 1.0, f"CRITERION_WEIGHTS must sum to 1.0, got {total}"
+
+
+validate_weights()
+
+
+# ---------------------------------------------------------------------------
 # MODELS
 # ---------------------------------------------------------------------------
 # The "brain". Must be pulled first:  ollama pull gemma3:4b

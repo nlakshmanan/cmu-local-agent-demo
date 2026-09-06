@@ -1,338 +1,433 @@
 """
-course_server.py — An MCP server.
+course_server.py -- An MCP server (data-center SITING tools).
 
 WHAT IS THIS FILE?
 ------------------
-This is a completely separate PROGRAM. The agent does not import it. Instead,
-the agent launches it as a subprocess and talks to it over stdin/stdout using
-JSON-RPC. That sounds like overkill for a handful of functions -- and for THIS
-demo, honestly, it is. But it buys three things that matter in real systems:
-
-  1. DISCOVERY. The agent never hardcodes tool names. It asks the server
-     "what can you do?" at startup (list_tools) and builds its prompt from the
-     answer. Add a tool here, restart, and the agent can use it -- with zero
-     changes to agent.py.
-
-  2. ISOLATION. This could be on another machine, written in TypeScript, or
-     maintained by a team you've never met. The agent doesn't care.
-
-  3. REUSE. This exact file, unchanged, can be plugged into Claude Desktop,
-     Claude Code, Cursor, or any other MCP client. Write the tool once,
-     use it everywhere. That is why people call MCP "USB-C for tools."
+A completely separate PROGRAM. The agent does not import it. It launches this
+file as a subprocess and talks to it over stdin/stdout using JSON-RPC. At
+startup the agent asks "what can you do?" (list_tools) and builds its prompt
+from the answer, so adding a @server.tool() here means the agent can use it
+with ZERO changes to agent.py.
 
 THE DIVISION OF LABOR (the actual lesson of this file)
 ------------------------------------------------------
-Every tool below is deterministic Python: exact averages, exact medians, a
-real chart rendered by matplotlib. An LLM cannot do ANY of that reliably --
-it can't see the gradebook, and it can't be trusted to average 32 numbers.
+Every tool below is deterministic Python: exact sub-scores, a weighted total,
+a real chart rendered by matplotlib. An LLM cannot do any of that reliably. It
+cannot see the site data and cannot be trusted to average four weighted
+criteria in its head.
 
-But look at what the tools DON'T do: none of them can answer "should I be
-worried about Sam?" That answer needs the numbers (tools), the trend (tools),
-plus judgement and context the teacher has shared (memory). Gluing those
-together into an assessment is the LLM's half of the job.
+But look at what the tools DON'T do: none of them can answer "which site should
+we actually commit capital to, and what's the one risk to fix first?" That
+needs the numbers (tools) plus judgement and the leadership context (memory).
+Gluing those into a recommendation is the LLM's half of the job.
 
-    Tools  -> facts, math, artifacts.   (things code does perfectly)
-    LLM    -> interpretation, judgement, language.  (things code can't do at all)
+    Tools  -> facts, math, artifacts.              (things code does perfectly)
+    LLM    -> interpretation, judgement, language.  (things code can't do)
 
-A NOTE ON "FastMCP"
--------------------
-If you Google MCP you will find tutorials using `FastMCP`. In v2 of the
-official SDK that class was renamed:
+DOMAIN
+------
+The agent forecasts data-center SITE selection for a cloud region expansion.
+Candidate sites live in data/candidate_sites.json; past build closeouts (used
+later for retrieval grounding) live in data/past_projects.json. The model has
+never seen either file. Tools are the only way in.
 
-    from mcp.server.fastmcp import FastMCP     # old (mcp 1.x)
-    from mcp.server import MCPServer           # new (mcp 2.x) -- what we use
-
-Same idea, same decorator, new name.
-
-HOW IT WORKS
-------------
-The @server.tool() decorator reads your function's TYPE HINTS and DOCSTRING and
-auto-generates the JSON schema that gets sent to the agent. So the docstring
-below is not a comment -- it is the prompt the LLM reads to decide whether to
-call this tool. Write docstrings like you're writing instructions, because
-you are.
+HOW A TOOL IS DESCRIBED TO THE MODEL
+------------------------------------
+The @server.tool() decorator reads each function's TYPE HINTS and DOCSTRING and
+auto-generates the JSON schema sent to the agent. The docstring is not a
+comment. It is the prompt the model reads to decide whether to call the tool.
+Write docstrings like instructions, because that is what they are.
 
 RUN IT STANDALONE (to prove it's a real server):
     python course_server.py
-    (it will sit there waiting for JSON-RPC on stdin -- Ctrl+C to quit)
+    (it waits for JSON-RPC on stdin -- Ctrl+C to quit)
 """
 
 import json
 import statistics
 from pathlib import Path
+from typing import Optional
 
 from mcp.server import MCPServer
 
 # The server's name. Shows up in client UIs.
-server = MCPServer("gradebook-tools")
+server = MCPServer("siting-tools")
 
-DATA_FILE = Path(__file__).parent / "course_data.json"
+DATA_DIR = Path(__file__).parent / "data"
+SITES_FILE = DATA_DIR / "candidate_sites.json"
 CHARTS_DIR = Path(__file__).parent / "charts"
+
+
+# ---------------------------------------------------------------------------
+# LEADERSHIP PRIORITIES (Module 1)
+# The weights and the build-timeline floor live in config.py, so the agent's
+# persona and this scoring tool obey ONE source of truth. Re-weight them there
+# and both the agent and this server pick up the change on restart.
+#
+# We import config defensively: if this server is ever run from a directory
+# where config.py is not importable, it still works with the same defaults.
+# ---------------------------------------------------------------------------
+try:
+    import config
+    CRITERION_WEIGHTS = config.CRITERION_WEIGHTS
+    BASE_BUILD_MONTHS = config.BASE_BUILD_MONTHS
+except Exception:
+    # ---- MODIFY HERE (fallback only; edit config.py, not this) ----
+    CRITERION_WEIGHTS = {"power": 0.35, "connectivity": 0.20, "hazard": 0.25, "permitting": 0.20}
+    BASE_BUILD_MONTHS = 18
 
 
 # ---------------------------------------------------------------------------
 # DATA LAYER
 # ---------------------------------------------------------------------------
-# We read a JSON file because it's zero-setup and students can open it in an
-# editor to see exactly what the agent sees.
+# We read a JSON file because it's zero-setup and you can open it in an editor
+# to see exactly what the agent sees.
 #
 # ---- MODIFY HERE ----
-# In a real project this is where you'd query Postgres, hit your LMS's REST
-# API (Canvas has one!), or call an internal service. NOTE: only this function
-# changes. The @server.tool() functions below stay identical, and the agent
-# never knows the difference. That boundary is the whole point of MCP.
-def _load_data() -> dict:
-    return json.loads(DATA_FILE.read_text(encoding="utf-8"))
+# In a real project this is where you'd hit an internal siting database, an
+# EIA / ISO power API, NOAA/FEMA hazard feeds, or a GIS service. NOTE: only this
+# function changes. The @server.tool() functions below stay identical and the
+# agent never knows the difference. That boundary is the whole point of MCP.
+def _load_sites() -> dict:
+    sites = json.loads(SITES_FILE.read_text(encoding="utf-8"))
+    return {s["site_id"]: s for s in sites}
 
 
-def _find_student(data: dict, name: str) -> str | None:
-    """Forgiving lookup -- small models are sloppy with capitalization, and
-    teachers say 'Sam', not 'Sam Rivera'. Match full name, either name part,
-    or prefix."""
-    name = name.strip().lower()
+def _find_site(sites: dict, name: str) -> Optional[str]:
+    """Forgiving lookup. Small models are sloppy, and a teacher-style user says
+    'Quincy' or 'site c', not 'site-c'. Match the id, the full name, any word
+    in the name, or a prefix. Returns the canonical site_id or None."""
+    name = (name or "").strip().lower()
     if not name:
         return None
-    for full in data["students"]:
-        parts = full.lower().split()
-        if name == full.lower() or name in parts:
-            return full
-    for full in data["students"]:
-        if full.lower().startswith(name):
-            return full
+    # exact id (accept "site c" / "sitec" for "site-c")
+    normalized = name.replace(" ", "-")
+    for sid in sites:
+        if normalized == sid.lower():
+            return sid
+    # match against the human name
+    for sid, s in sites.items():
+        full = s["name"].lower()
+        if name == full or name in full.split():
+            return sid
+    for sid, s in sites.items():
+        if s["name"].lower().startswith(name):
+            return sid
+    # last resort: any word of the query appears in the name
+    for sid, s in sites.items():
+        if any(w in s["name"].lower() for w in name.split() if len(w) > 2):
+            return sid
     return None
 
 
-def _short(assignment: str) -> str:
-    """'HW2 - Tool Use & Function Calling' -> 'HW2', for chart labels."""
-    return assignment.split(" - ")[0]
+def _short(name: str) -> str:
+    """'Columbus, OH - Central US expansion' -> 'Columbus' for chart labels."""
+    return name.split(",")[0].split(" - ")[0].strip()
 
 
 # ---------------------------------------------------------------------------
-# TOOL 1 — the "LLMs can't do math" demo
+# Deterministic 0-100 sub-scores. This is the math the model must NEVER do
+# itself. Each turns one criterion's raw facts into a comparable 0-100 number.
 # ---------------------------------------------------------------------------
-@server.tool()
-def calculate(expression: str) -> str:
-    """Evaluate a math expression and return the exact answer.
-
-    ALWAYS use this for arithmetic. Never do math yourself -- you will get it
-    wrong.
-
-    Only use numbers that appear in the conversation or in an earlier tool
-    result. NEVER invent numbers to put in the expression.
-
-    Do not use this for class averages or statistics -- class_stats already
-    computed those exactly. This tool is for ad-hoc math like grade projections.
-
-    Always parenthesize fully: "(94 + 61 + 88 + 79) / 4", never
-    "94 + 61 + 88 + 79 / 4" -- those give different answers.
-    """
-    # NOTE: eval() is used here for brevity in a teaching demo. It runs on the
-    # student's own machine with a stripped-down namespace. In production you
-    # would use a real expression parser (e.g. the `asteval` package) -- never
-    # eval() a string that came out of an LLM on a server you care about.
-    try:
-        result = eval(expression, {"__builtins__": {}}, {})
-        return f"{expression} = {result}"
-    except Exception as e:
-        return f"Error evaluating '{expression}': {e}"
+def _clamp(x: float) -> float:
+    return max(0.0, min(100.0, x))
 
 
-# ---------------------------------------------------------------------------
-# TOOL 2 — one student, in depth
-# ---------------------------------------------------------------------------
-@server.tool()
-def student_report(student: str) -> str:
-    """Full record for ONE student: every grade, their average, attendance,
-    and late submissions.
-
-    Use this whenever the teacher asks about a specific student by name --
-    "how is Sam doing", "pull up Marcus", "what did Jordan get on HW3".
-
-    This is one student only. For the roster or every student at once, use
-    list_students; for class-wide statistics, use class_stats.
-    """
-    data = _load_data()
-    match = _find_student(data, student)
-    if match is None:
-        known = ", ".join(data["students"])
-        return f"No student named '{student}'. Known students: {known}"
-
-    record = data["students"][match]
-    scores = list(record["grades"].values())
-    lines = [f"Record for {match} ({data['course']}):"]
-    lines += [f"  - {a}: {s}/100" for a, s in record["grades"].items()]
-    lines.append(f"  Average: {sum(scores) / len(scores):.1f}/100")
-    lines.append(f"  Attendance: {record['attendance_pct']}%")
-    lines.append(f"  Late submissions: {record['late_submissions']}")
-    return "\n".join(lines)
+_RISK_LEVEL = {"low": 0, "medium": 1, "high": 2}
+_TIER_VALUE = {"low": 0, "medium": 1, "high": 2}
 
 
-# ---------------------------------------------------------------------------
-# TOOL 3 — the roster
-# ---------------------------------------------------------------------------
-# This tool exists because of a real failure: asked "who are all my students?",
-# the agent had no tool that answered it -- so the model invented a roster with
-# confident, wrong numbers. When the agent fabricates, the fix is usually not a
-# better prompt. It's a missing tool.
-@server.tool()
-def list_students() -> str:
-    """List EVERY student in the class with their average, attendance, and
-    late submissions -- one line each.
-
-    Use this when the teacher asks who their students are, for the roster,
-    or for stats/averages of each individual student at once. For one
-    student's full grade breakdown, use student_report instead.
-    """
-    data = _load_data()
-    lines = [f"Roster for {data['course']} ({len(data['students'])} students):"]
-    for name, rec in data["students"].items():
-        scores = list(rec["grades"].values())
-        lines.append(
-            f"  - {name}: average {sum(scores) / len(scores):.1f}/100, "
-            f"attendance {rec['attendance_pct']}%, "
-            f"late submissions {rec['late_submissions']}"
-        )
-    return "\n".join(lines)
+def _power_score(power: dict) -> float:
+    # Cheaper $/kWh -> higher (0.03 -> 100, 0.08 -> 0).
+    cost = _clamp(100 - (power["cost_per_kwh"] - 0.03) / 0.05 * 100)
+    # More deliverable capacity -> higher (400 MW caps it).
+    cap = _clamp(power["grid_capacity_mw"] / 400 * 100)
+    # Shorter interconnection queue -> higher (30 mo -> 0).
+    queue = _clamp(100 - power["interconnection_queue_months"] / 30 * 100)
+    # Small bonus for a cleaner grid mix (nice-to-have, not a driver).
+    renew = _clamp(power.get("renewable_pct", 0))
+    return round(0.4 * cost + 0.2 * cap + 0.35 * queue + 0.05 * renew, 1)
 
 
-# ---------------------------------------------------------------------------
-# TOOL 4 — the whole class, exactly
-# ---------------------------------------------------------------------------
-@server.tool()
-def class_stats(assignment: str = "overall") -> str:
-    """Exact summary statistics for the WHOLE CLASS: mean, median, high, low,
-    and who scored the high/low, per assignment.
+def _hazard_score(hazard: dict) -> float:
+    total = sum(_RISK_LEVEL[hazard[k]] for k in ("flood_risk", "seismic_risk", "storm_risk"))
+    return round(_clamp(100 - total / 6 * 100), 1)   # 0 risk -> 100, all high -> 0
 
-    Use this for ANY question about the class as a whole: "how did the class
-    do", "what was the average on HW2", "what's the spread". Never compute
-    class statistics yourself -- this tool sees every student, you do not.
 
-    Pass "overall" (the default) for a table covering every assignment.
-    Pass part of an assignment name, e.g. "HW2" or "Midterm", for one.
-    """
-    data = _load_data()
-    wanted = assignment.strip().lower()
+def _connectivity_score(geo: dict) -> float:
+    # Latency dominates (0 ms -> 100, 50 ms -> 0); dense fiber is a small bonus.
+    latency = _clamp(100 - geo["latency_ms"] / 50 * 100)
+    fiber = _clamp(geo.get("fiber_routes", 0) / 6 * 100)
+    return round(0.85 * latency + 0.15 * fiber, 1)
 
-    # Models naturally say "overall"/"all"/"everything" rather than passing an
-    # empty string, so accept all of them. Meeting the model where it is costs
-    # one line and removes a whole class of failure.
-    if wanted in ("overall", "all", "everything", "total", "average", "any", ""):
-        targets = data["assignments"]
+
+def _permitting_score(permitting: dict) -> float:
+    incentive = {"low": 30, "medium": 60, "high": 90}[permitting["incentive_value"]]
+    complexity_penalty = {"low": 0, "medium": 20, "high": 40}[permitting["permit_complexity"]]
+    # Water is a real siting constraint for cooling. Scarce water is a penalty.
+    water_penalty = {"low": 20, "medium": 8, "high": 0}[permitting.get("water_availability", "high")]
+    return round(_clamp(incentive - complexity_penalty - water_penalty), 1)
+
+
+def _score(site: dict) -> dict:
+    """The whole deterministic scoring model for one site. Returned as a dict
+    so both score_site (text) and chart_sites (bars) can reuse it."""
+    subscores = {
+        "power":        _power_score(site["power"]),
+        "connectivity": _connectivity_score(site["geo"]),
+        "hazard":       _hazard_score(site["hazard"]),
+        "permitting":   _permitting_score(site["permitting"]),
+    }
+    wsum = sum(CRITERION_WEIGHTS.values()) or 1.0
+    total = sum(subscores[k] * (CRITERION_WEIGHTS[k] / wsum) for k in subscores)
+
+    # Timeline: build floor gated by the slowest dependency (the grid queue).
+    timeline = BASE_BUILD_MONTHS + site["power"]["interconnection_queue_months"]
+
+    # Risk tier straight from the weighted score.
+    risk_tier = "Low" if total >= 75 else ("Medium" if total >= 55 else "High")
+
+    if total >= 72 and risk_tier != "High":
+        rec = "Strong candidate"
+    elif total >= 55:
+        rec = "Conditional -- mitigate the top risk before committing capital"
     else:
-        targets = [a for a in data["assignments"] if wanted in a.lower()]
-        if not targets:
-            return f"No assignment matching '{assignment}'. Valid: {', '.join(data['assignments'])}"
+        rec = "Weak / deprioritize"
 
-    n = len(data["students"])
-    lines = [f"Class statistics for {data['course']} ({n} students):"]
-    for a in targets:
-        by_student = {name: rec["grades"][a] for name, rec in data["students"].items()}
-        scores = list(by_student.values())
-        top = max(by_student, key=by_student.get)
-        bottom = min(by_student, key=by_student.get)
-        lines.append(
-            f"  - {a}: mean {statistics.mean(scores):.1f}, "
-            f"median {statistics.median(scores):.1f}, "
-            f"high {by_student[top]} ({top}), low {by_student[bottom]} ({bottom})"
-        )
-    if len(targets) > 1:
-        everything = [s for rec in data["students"].values() for s in rec["grades"].values()]
-        lines.append(f"  Overall course mean: {statistics.mean(everything):.1f}/100")
-    return "\n".join(lines)
+    return {
+        "subscores": subscores,
+        "score": round(total, 1),
+        "timeline_months": timeline,
+        "risk_tier": risk_tier,
+        "recommendation": rec,
+    }
 
 
-# ---------------------------------------------------------------------------
-# TOOL 5 — deadlines
-# ---------------------------------------------------------------------------
+# ===========================================================================
+# DATA TOOLS -- simulate the live sources (EIA power, NOAA/FEMA hazard,
+# Maps/Census geo, permitting portals). Here they read the JSON, but the agent
+# treats each like a real call to a separate source.
+# ===========================================================================
 @server.tool()
-def list_deadlines() -> str:
-    """List all upcoming assignment deadlines with due dates and grade weights.
+def get_power(site: str) -> str:
+    """Power profile for ONE candidate site: electricity cost, deliverable grid
+    capacity, interconnection queue length, and renewable mix.
 
-    Use this when the teacher asks what is due next, what is coming up, or
-    anything involving the course schedule.
+    Use this whenever the question is about power, electricity cost, grid
+    capacity, or how long the utility interconnection will take for a specific
+    site. For a full weighted assessment use score_site; for the list of every
+    site use list_sites.
     """
-    data = _load_data()
-    lines = [f"Upcoming deadlines for {data['course']}:"]
-    lines += [
-        f"  - {d['assignment']} - due {d['due']} (worth {d['weight']} of final grade)"
-        for d in data["deadlines"]
-    ]
+    sites = _load_sites()
+    sid = _find_site(sites, site)
+    if sid is None:
+        return f"No site matching '{site}'. Known sites: {', '.join(s['name'] for s in sites.values())}"
+    p = sites[sid]["power"]
+    return (
+        f"Power for {sites[sid]['name']} ({sid}):\n"
+        f"  - electricity cost: ${p['cost_per_kwh']}/kWh\n"
+        f"  - deliverable grid capacity: {p['grid_capacity_mw']} MW\n"
+        f"  - interconnection queue: {p['interconnection_queue_months']} months\n"
+        f"  - renewable mix: {p.get('renewable_pct', 'n/a')}%"
+    )
+
+
+@server.tool()
+def get_hazard(site: str) -> str:
+    """Natural-hazard profile for ONE site: flood, seismic, and storm risk,
+    each rated low / medium / high.
+
+    Use this for questions about safety, natural hazards, flooding,
+    earthquakes, or storm exposure at a specific site. For the overall
+    assessment use score_site.
+    """
+    sites = _load_sites()
+    sid = _find_site(sites, site)
+    if sid is None:
+        return f"No site matching '{site}'. Known sites: {', '.join(s['name'] for s in sites.values())}"
+    h = sites[sid]["hazard"]
+    return (
+        f"Hazards for {sites[sid]['name']} ({sid}):\n"
+        f"  - flood risk: {h['flood_risk']}\n"
+        f"  - seismic risk: {h['seismic_risk']}\n"
+        f"  - storm risk: {h['storm_risk']}"
+    )
+
+
+@server.tool()
+def get_geo(site: str) -> str:
+    """Connectivity profile for ONE site: network latency to the target metro,
+    distance to that metro, and number of long-haul fiber routes.
+
+    Use this for questions about latency, connectivity, distance to customers,
+    or fiber for a specific site. For the overall assessment use score_site.
+    """
+    sites = _load_sites()
+    sid = _find_site(sites, site)
+    if sid is None:
+        return f"No site matching '{site}'. Known sites: {', '.join(s['name'] for s in sites.values())}"
+    g = sites[sid]["geo"]
+    return (
+        f"Connectivity for {sites[sid]['name']} ({sid}):\n"
+        f"  - network latency: {g['latency_ms']} ms\n"
+        f"  - distance to major metro: {g['km_to_major_metro']} km\n"
+        f"  - long-haul fiber routes: {g.get('fiber_routes', 'n/a')}"
+    )
+
+
+@server.tool()
+def get_permitting(site: str) -> str:
+    """Permitting profile for ONE site: incentive value, permit complexity, and
+    water availability for cooling, each rated low / medium / high.
+
+    Use this for questions about incentives, tax breaks, permitting difficulty,
+    regulatory friction, or water/cooling supply at a specific site. For the
+    overall assessment use score_site.
+    """
+    sites = _load_sites()
+    sid = _find_site(sites, site)
+    if sid is None:
+        return f"No site matching '{site}'. Known sites: {', '.join(s['name'] for s in sites.values())}"
+    pm = sites[sid]["permitting"]
+    return (
+        f"Permitting for {sites[sid]['name']} ({sid}):\n"
+        f"  - incentive value: {pm['incentive_value']}\n"
+        f"  - permit complexity: {pm['permit_complexity']}\n"
+        f"  - water availability: {pm.get('water_availability', 'n/a')}"
+    )
+
+
+# ===========================================================================
+# COMPUTE TOOL -- the weighted score. Never let the model estimate this.
+# ===========================================================================
+@server.tool()
+def score_site(site: str) -> str:
+    """Full weighted assessment for ONE site: a 0-100 score across power,
+    connectivity, hazard, and permitting, plus an estimated build timeline in
+    months, a risk tier, and a recommendation.
+
+    Use this whenever the teacher asks how good a site is, whether to build
+    there, its score, its timeline, or its risk. Never estimate any of these
+    numbers yourself -- this tool applies the exact leadership weights to every
+    criterion. For one raw criterion use get_power / get_hazard / get_geo /
+    get_permitting; to compare every site use list_sites.
+    """
+    sites = _load_sites()
+    sid = _find_site(sites, site)
+    if sid is None:
+        return f"No site matching '{site}'. Known sites: {', '.join(s['name'] for s in sites.values())}"
+    s = sites[sid]
+    r = _score(s)
+    sub = r["subscores"]
+    return (
+        f"Assessment for {s['name']} ({sid}):\n"
+        f"  sub-scores (0-100): power {sub['power']}, connectivity {sub['connectivity']}, "
+        f"hazard {sub['hazard']}, permitting {sub['permitting']}\n"
+        f"  weighted score: {r['score']}/100\n"
+        f"  estimated timeline: {r['timeline_months']} months "
+        f"(18-month build floor + {s['power']['interconnection_queue_months']}-month grid queue)\n"
+        f"  risk tier: {r['risk_tier']}\n"
+        f"  recommendation: {r['recommendation']}\n"
+        f"  weights used: {CRITERION_WEIGHTS}"
+    )
+
+
+# ===========================================================================
+# ROSTER -- every site at once, ranked. This tool exists for the same reason
+# the gradebook's list_students did: asked "compare all my sites", a model with
+# no matching tool will confidently invent a ranking. When an agent fabricates,
+# the fix is usually a missing tool, not a better prompt.
+# ===========================================================================
+@server.tool()
+def list_sites() -> str:
+    """List EVERY candidate site with its weighted score, timeline, and risk
+    tier, ranked best-first -- one line each.
+
+    Use this when the teacher asks for all the sites, the shortlist, the
+    ranking, or wants to compare sites. For one site's full breakdown use
+    score_site.
+    """
+    sites = _load_sites()
+    ranked = sorted(
+        ((sid, s, _score(s)) for sid, s in sites.items()),
+        key=lambda t: t[2]["score"],
+        reverse=True,
+    )
+    lines = [f"Candidate sites ranked ({len(sites)} total):"]
+    for i, (sid, s, r) in enumerate(ranked, 1):
+        lines.append(
+            f"  {i}. {s['name']} ({sid}): score {r['score']}/100, "
+            f"{r['timeline_months']} mo, {r['risk_tier']} risk -- {r['recommendation']}"
+        )
     return "\n".join(lines)
 
 
-# ---------------------------------------------------------------------------
-# TOOL 6 — a tool that returns an ARTIFACT, not just text
-# ---------------------------------------------------------------------------
-# This is the one to linger on in class. The LLM cannot draw. It never will.
-# But it can DECIDE a chart is needed and delegate to code that draws one.
-# The tool returns two things: a marker line the GUI uses to display the image,
-# and the plotted numbers as text so the LLM can talk about what's in it.
+# ===========================================================================
+# ARTIFACT TOOL -- returns a PNG, not just text. The LLM cannot draw. It can
+# DECIDE a chart is needed and delegate to code that draws one. We return a
+# marker line the GUI uses to display the image, plus the plotted numbers as
+# text so the model can talk about what's in it.
+# ===========================================================================
 @server.tool()
-def chart_grades(target: str = "class") -> str:
-    """Draw a bar chart as a PNG image and display it to the teacher.
+def chart_sites(target: str = "all") -> str:
+    """Draw a bar chart as a PNG and display it to the teacher.
 
-    Use this whenever the teacher asks for a chart, graph, plot, or any
-    "visual" or "picture" of performance.
+    Use this whenever the teacher asks for a chart, graph, plot, or any visual
+    of the sites. Pass "all" (the default) to chart the weighted score of every
+    site side by side (the ranking). Pass a single site's name to chart that
+    site's four sub-scores (power, connectivity, hazard, permitting).
 
-    Pass "class" (the default) to chart the class average on each assignment.
-    Pass a student's name to chart that student's scores side by side with the
-    class average.
-
-    The chart is shown to the teacher automatically. Never describe the image
-    file itself -- just summarize what the numbers show.
+    The chart is shown automatically. Never describe the image file itself --
+    just summarize what the numbers show.
     """
     import matplotlib
-
-    matplotlib.use("Agg")  # no GUI window -- we render straight to a file
+    matplotlib.use("Agg")   # no GUI window; render straight to a file
     import matplotlib.pyplot as plt
 
-    data = _load_data()
-    assignments = data["assignments"]
-    labels = [_short(a) for a in assignments]
-    class_avgs = [
-        statistics.mean(rec["grades"][a] for rec in data["students"].values())
-        for a in assignments
-    ]
-
+    sites = _load_sites()
     CHARTS_DIR.mkdir(exist_ok=True)
     fig, ax = plt.subplots(figsize=(7, 4))
 
-    student = None if target.strip().lower() in ("class", "overall", "all", "") else _find_student(data, target)
-    if target.strip().lower() not in ("class", "overall", "all", "") and student is None:
-        return f"No student named '{target}'. Known students: {', '.join(data['students'])}"
+    single = None if target.strip().lower() in ("all", "sites", "everything", "", "ranking") \
+        else _find_site(sites, target)
+    if target.strip().lower() not in ("all", "sites", "everything", "", "ranking") and single is None:
+        return f"No site matching '{target}'. Known sites: {', '.join(s['name'] for s in sites.values())}"
 
-    if student is None:
-        ax.bar(labels, class_avgs, color="#4c72b0")
-        ax.set_title(f"Class average by assignment — {data['course']}")
-        path = CHARTS_DIR / "class_averages.png"
-        plotted = [f"  - {l}: class average {v:.1f}" for l, v in zip(labels, class_avgs)]
-    else:
-        scores = [data["students"][student]["grades"][a] for a in assignments]
-        x = range(len(labels))
-        ax.bar([i - 0.2 for i in x], scores, width=0.4, label=student, color="#4c72b0")
-        ax.bar([i + 0.2 for i in x], class_avgs, width=0.4, label="Class avg", color="#c4c4c4")
-        ax.set_xticks(list(x), labels)
-        ax.legend()
-        ax.set_title(f"{student} vs class average — {data['course']}")
-        path = CHARTS_DIR / f"{student.split()[0].lower()}_vs_class.png"
-        # Precompute the comparisons in code. A small model asked to compare 94
-        # to 82.5 will sometimes get it backwards; code never does. If a
-        # comparison matters, do the comparing in the tool, not the prompt.
-        plotted = [
-            f"  - {l}: {student} {s}, class average {v:.1f} "
-            f"({'ABOVE' if s >= v else 'BELOW'} average by {abs(s - v):.1f})"
-            for l, s, v in zip(labels, scores, class_avgs)
-        ]
-        above = [l for l, s, v in zip(labels, scores, class_avgs) if s >= v]
-        below = [l for l, s, v in zip(labels, scores, class_avgs) if s < v]
+    if single is None:
+        # Ranking chart: weighted score per site.
+        ranked = sorted(
+            ((s, _score(s)) for s in sites.values()),
+            key=lambda t: t[1]["score"], reverse=True,
+        )
+        labels = [_short(s["name"]) for s, _ in ranked]
+        scores = [r["score"] for _, r in ranked]
+        colors = ["#2e7d32" if v >= 72 else ("#f9a825" if v >= 55 else "#c62828") for v in scores]
+        ax.bar(labels, scores, color=colors)
+        ax.set_title("Candidate sites by weighted score")
+        ax.set_ylabel("Weighted score /100")
+        path = CHARTS_DIR / "site_scores.png"
+        plotted = [f"  - {l}: {v}/100" for l, v in zip(labels, scores)]
         plotted.append(
-            f"Correct summary (repeat this faithfully): {student} scored above "
-            f"the class average on {', '.join(above) or 'nothing'} and below it "
-            f"on {', '.join(below) or 'nothing'}."
+            "Correct summary (repeat faithfully): ranked best-first -> "
+            + ", ".join(f"{l} ({v})" for l, v in zip(labels, scores)) + "."
+        )
+    else:
+        # Sub-score profile for one site.
+        s = sites[single]
+        r = _score(s)
+        cats = ["power", "connectivity", "hazard", "permitting"]
+        vals = [r["subscores"][c] for c in cats]
+        ax.bar(cats, vals, color="#4c72b0")
+        ax.set_title(f"{_short(s['name'])} -- sub-scores (weighted total {r['score']}/100)")
+        ax.set_ylabel("Sub-score /100")
+        path = CHARTS_DIR / f"{single}_subscores.png"
+        plotted = [f"  - {c}: {v}/100" for c, v in zip(cats, vals)]
+        plotted.append(
+            f"Weighted total {r['score']}/100, {r['timeline_months']} months, "
+            f"{r['risk_tier']} risk."
         )
 
     ax.set_ylim(0, 100)
-    ax.set_ylabel("Score /100")
     fig.tight_layout()
     fig.savefig(path, dpi=110)
     plt.close(fig)
@@ -341,53 +436,7 @@ def chart_grades(target: str = "class") -> str:
     return f"CHART_SAVED: {path}\nThe chart plots:\n" + "\n".join(plotted)
 
 
-# ---------------------------------------------------------------------------
-# TOOL 7 — THE LIVE DEMO TOOL
-# ---------------------------------------------------------------------------
-# Uncomment this function during class, restart the app, and watch the agent
-# start using it immediately. You will not touch agent.py. You will not touch
-# app.py. The Tools panel in the GUI will just grow another entry.
-#
-# THAT is runtime tool discovery, and it is the thing MCP is actually for.
-#
-# Select everything between the two markers below and hit Ctrl+/ (Cmd+/ on Mac).
-# Do NOT include this paragraph in the selection.
-
-# >>>>>>>>>> UNCOMMENT FROM HERE >>>>>>>>>>
-# @server.tool()
-# def find_at_risk() -> str:
-#     """List students who may be at risk, with the evidence: course average
-#     below 70, attendance below 80%, or a grade trend that is falling.
-#
-#     Use this when the teacher asks who is struggling, who is falling behind,
-#     who needs a check-in, or who they should be worried about. Never guess
-#     at this yourself -- this tool applies exact thresholds to every student.
-#     """
-#     data = _load_data()
-#     flagged = []
-#     for name, rec in data["students"].items():
-#         scores = list(rec["grades"].values())
-#         avg = sum(scores) / len(scores)
-#         reasons = []
-#         if avg < 70:
-#             reasons.append(f"average {avg:.1f}")
-#         if rec["attendance_pct"] < 80:
-#             reasons.append(f"attendance {rec['attendance_pct']}%")
-#         # "Trend" = second half of the term vs first half, 12+ points down.
-#         half = len(scores) // 2
-#         drop = sum(scores[:half]) / half - sum(scores[half:]) / (len(scores) - half)
-#         if drop >= 12:
-#             reasons.append(f"scores falling (down {drop:.0f} pts)")
-#         if reasons:
-#             flagged.append(f"  - {name}: {', '.join(reasons)}")
-#
-#     if not flagged:
-#         return "No students currently meet the at-risk criteria."
-#     return "At-risk students (avg < 70, attendance < 80%, or falling scores):\n" + "\n".join(flagged)
-# <<<<<<<<<< TO HERE <<<<<<<<<<
-
-
 if __name__ == "__main__":
     # stdio transport: the client launches this file and pipes JSON-RPC over
-    # stdin/stdout. MCP also supports HTTP for remote servers -- see the README.
+    # stdin/stdout. MCP also supports HTTP for remote servers.
     server.run()
