@@ -1,0 +1,10 @@
+id,module,expected,observed,result
+grounding_changes_decision,M3,grounded score/timeline worsen vs live-data baseline,"score 59.3->39.3, timeline 44->58, 1 hit(s)",PASS
+threshold_blocks_false_analogy,M3,no overrun penalty; stays Strong,"grounded 73.5 vs base 73.5, rec 'Strong candidate'",PASS
+source_failure_flagged,M2/M5,failure recorded + Critic FLAG,"flags=1, verdict=FLAG",PASS
+guardrail_downgrades_unsupported_strong,M6,Strong -> Conditional when unsupported,"downgraded=True, rec='Conditional -- mitigate the top risk before committing capital'",PASS
+high_capital_escalated_to_human,M6,">=1 Strong, all require human review",1 Strong; all escalated=True,PASS
+ranking_deterministic,M5,same order on repeat runs,stable=True,PASS
+scores_in_range,M1,every score within 0-100,out-of-range=none,PASS
+config_validation_catches_bad_weights,M1/M6,"default valid, bad weights rejected","default_ok=True, tampered_caught=True",PASS
+unknown_site_refused,M2,"refuse unknown site, do not fabricate",'No site matching 'Atlantis'. Known sit...',PASS
