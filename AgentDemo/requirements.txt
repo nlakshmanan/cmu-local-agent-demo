@@ -10,3 +10,4 @@ mcp>=2.0.0         # official Model Context Protocol SDK
 gradio>=6.0        # the GUI
 numpy>=1.24        # cosine similarity for semantic memory search
 matplotlib>=3.8    # the chart_grades tool renders PNGs with this
+plotly>=5.20     # interactive site map (offline scatter_geo, no tiles/keys)

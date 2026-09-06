@@ -25,7 +25,9 @@
       "permit_complexity": "medium",
       "water_availability": "high"
     },
-    "profile_text": "Suburban Columbus parcel near an existing utility corridor and dense long-haul fiber. Strong state and local data-center tax incentives, ample municipal water for cooling, and low natural-hazard exposure apart from occasional severe thunderstorms. Grid interconnection queue is moderate; nearest metro is close, keeping latency low for Central US workloads."
+    "profile_text": "Suburban Columbus parcel near an existing utility corridor and dense long-haul fiber. Strong state and local data-center tax incentives, ample municipal water for cooling, and low natural-hazard exposure apart from occasional severe thunderstorms. Grid interconnection queue is moderate; nearest metro is close, keeping latency low for Central US workloads.",
+    "lat": 39.96,
+    "lon": -83.0
   },
   {
     "site_id": "site-b",
@@ -53,7 +55,9 @@
       "permit_complexity": "low",
       "water_availability": "medium"
     },
-    "profile_text": "Cheap ERCOT power with high wind and solar penetration and an unusually short interconnection queue, since ERCOT is a standalone grid with faster energization than the eastern interconnects. Streamlined Texas permitting and strong incentives. Main watch items are summer heat driving cooling load, medium flash-flood exposure, and constrained long-term water supply."
+    "profile_text": "Cheap ERCOT power with high wind and solar penetration and an unusually short interconnection queue, since ERCOT is a standalone grid with faster energization than the eastern interconnects. Streamlined Texas permitting and strong incentives. Main watch items are summer heat driving cooling load, medium flash-flood exposure, and constrained long-term water supply.",
+    "lat": 29.42,
+    "lon": -98.49
   },
   {
     "site_id": "site-c",
@@ -81,7 +85,9 @@
       "permit_complexity": "medium",
       "water_availability": "high"
     },
-    "profile_text": "Rural central-Washington site with very cheap, nearly all-hydro power and a cool, dry climate ideal for free cooling. Downsides are distance from a major metro (higher latency, thinner fiber) and a long transmission interconnection queue tied to a needed substation upgrade. Cascadia seismic exposure is moderate. Novel location with few nearby comparable builds."
+    "profile_text": "Rural central-Washington site with very cheap, nearly all-hydro power and a cool, dry climate ideal for free cooling. Downsides are distance from a major metro (higher latency, thinner fiber) and a long transmission interconnection queue tied to a needed substation upgrade. Cascadia seismic exposure is moderate. Novel location with few nearby comparable builds.",
+    "lat": 47.23,
+    "lon": -119.85
   },
   {
     "site_id": "site-d",
@@ -109,7 +115,9 @@
       "permit_complexity": "medium",
       "water_availability": "low"
     },
-    "profile_text": "Established Phoenix-area data-center market with excellent fiber density, very low natural-hazard exposure, and strong incentives. Latency is low thanks to proximity to metro peering. The dominant risk is water: arid climate and tightening groundwater rules make water-based cooling contentious, pushing designs toward air or closed-loop cooling and lengthening environmental permitting."
+    "profile_text": "Established Phoenix-area data-center market with excellent fiber density, very low natural-hazard exposure, and strong incentives. Latency is low thanks to proximity to metro peering. The dominant risk is water: arid climate and tightening groundwater rules make water-based cooling contentious, pushing designs toward air or closed-loop cooling and lengthening environmental permitting.",
+    "lat": 33.45,
+    "lon": -112.07
   },
   {
     "site_id": "site-e",
@@ -137,7 +145,9 @@
       "permit_complexity": "high",
       "water_availability": "medium"
     },
-    "profile_text": "Premier Southeast interconnection hub: the lowest latency and richest fiber of any candidate, close to a major metro. Trade-offs are higher power cost, a low-renewable grid mix, and complex multi-jurisdiction permitting that historically slows approvals. Medium exposure to remnant tropical storms and localized flooding."
+    "profile_text": "Premier Southeast interconnection hub: the lowest latency and richest fiber of any candidate, close to a major metro. Trade-offs are higher power cost, a low-renewable grid mix, and complex multi-jurisdiction permitting that historically slows approvals. Medium exposure to remnant tropical storms and localized flooding.",
+    "lat": 33.75,
+    "lon": -84.39
   },
   {
     "site_id": "site-f",
@@ -165,6 +175,8 @@
       "permit_complexity": "low",
       "water_availability": "high"
     },
-    "profile_text": "Iowa site with abundant low-cost wind power and generous incentives; a favored region for hyperscale builds. Cool climate aids cooling and water is plentiful. The two concerns are a long wind-driven interconnection queue (MISO study backlog) and high severe-weather exposure, including tornado and hail risk that raises hardening costs."
+    "profile_text": "Iowa site with abundant low-cost wind power and generous incentives; a favored region for hyperscale builds. Cool climate aids cooling and water is plentiful. The two concerns are a long wind-driven interconnection queue (MISO study backlog) and high severe-weather exposure, including tornado and hail risk that raises hardening costs.",
+    "lat": 41.59,
+    "lon": -93.62
   }
 ]
