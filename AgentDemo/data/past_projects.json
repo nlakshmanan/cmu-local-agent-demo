@@ -1,0 +1,44 @@
+[
+  {
+    "title": "West US 2 - Quincy WA Phase 3 (2021)",
+    "region": "Pacific Northwest",
+    "outcome": "overran",
+    "grid_slip_months": 14,
+    "text": "Rural central-Washington hydro-powered build. Construction and fit-out finished close to plan, but grid energization slipped 14 months: the utility interconnection depended on a shared 230kV substation upgrade whose queue and long-lead transformers were underestimated. Lesson: for remote sites, treat transmission interconnection - not the building - as the critical path, and secure a firm energization date before committing capital. Thin local fiber also delayed carrier turn-up."
+  },
+  {
+    "title": "South Central US - San Antonio TX (2020)",
+    "region": "Texas / ERCOT",
+    "outcome": "on_time",
+    "grid_slip_months": 0,
+    "text": "ERCOT interconnection energized on schedule; the standalone Texas grid and a nearby existing substation gave a short, predictable queue. Permitting was fast under streamlined state rules. The only overrun risk was cooling capacity during a summer heat wave, mitigated by an early switch to a higher-ambient chiller spec. Lesson: fast-interconnect grids with spare local substation capacity de-risk the timeline the most."
+  },
+  {
+    "title": "East US 2 - Columbus OH (2022)",
+    "region": "Midwest",
+    "outcome": "overran",
+    "grid_slip_months": 9,
+    "text": "Suburban Columbus build with strong incentives and close fiber. Energization slipped about 9 months because a transmission line upgrade required to deliver the full 280MW was not identified until the system-impact study. Water and construction went smoothly. Lesson: request the utility system-impact study early - nameplate grid capacity nearby does not mean deliverable capacity without upgrades."
+  },
+  {
+    "title": "West US 3 - Phoenix AZ (2019)",
+    "region": "Southwest",
+    "outcome": "overran",
+    "grid_slip_months": 7,
+    "text": "Phoenix-area build in a mature market with excellent fiber and low hazard. The grid connected roughly on time, but the overall project slipped about 7 months on environmental and water permitting: groundwater-use scrutiny forced a redesign from evaporative to closed-loop cooling mid-project. Lesson: in arid regions, resolve the water/cooling strategy and its permits before design freeze, or permitting - not power - becomes the critical path."
+  },
+  {
+    "title": "Central US - Des Moines IA (2021)",
+    "region": "Midwest",
+    "outcome": "overran",
+    "grid_slip_months": 12,
+    "text": "Iowa wind-powered build with cheap power and easy permitting. Energization slipped about 12 months inside the MISO generator/large-load interconnection study backlog; the renewable-heavy queue was longer than the incentive package implied. Severe-weather hardening (tornado/hail) added cost but not delay. Lesson: renewable-rich regions often carry the longest interconnection queues - cheap power can hide an expensive timeline."
+  },
+  {
+    "title": "East US - Atlanta GA (2018)",
+    "region": "Southeast",
+    "outcome": "on_time",
+    "grid_slip_months": 0,
+    "text": "Atlanta interconnection hub build; lowest latency and densest fiber of the portfolio. Power energized on time using an existing high-capacity feed. The risk that nearly caused a slip was multi-jurisdiction permitting complexity, absorbed by starting permitting nine months ahead of groundbreaking and dedicating a local expediter. Lesson: where permitting is complex but power is ready, front-load approvals rather than the build."
+  }
+]

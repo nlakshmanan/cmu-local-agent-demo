@@ -1,0 +1,170 @@
+[
+  {
+    "site_id": "site-a",
+    "name": "Columbus, OH - Central US expansion",
+    "region": "Midwest",
+    "azure_region_intent": "Capacity relief for Central US (East US 2 adjacency)",
+    "power": {
+      "cost_per_kwh": 0.062,
+      "grid_capacity_mw": 280,
+      "interconnection_queue_months": 16,
+      "renewable_pct": 38
+    },
+    "hazard": {
+      "flood_risk": "low",
+      "seismic_risk": "low",
+      "storm_risk": "medium"
+    },
+    "geo": {
+      "latency_ms": 11,
+      "km_to_major_metro": 25,
+      "fiber_routes": 4
+    },
+    "permitting": {
+      "incentive_value": "high",
+      "permit_complexity": "medium",
+      "water_availability": "high"
+    },
+    "profile_text": "Suburban Columbus parcel near an existing utility corridor and dense long-haul fiber. Strong state and local data-center tax incentives, ample municipal water for cooling, and low natural-hazard exposure apart from occasional severe thunderstorms. Grid interconnection queue is moderate; nearest metro is close, keeping latency low for Central US workloads."
+  },
+  {
+    "site_id": "site-b",
+    "name": "San Antonio, TX - South Central US expansion",
+    "region": "Texas / ERCOT",
+    "azure_region_intent": "Growth for South Central US",
+    "power": {
+      "cost_per_kwh": 0.041,
+      "grid_capacity_mw": 360,
+      "interconnection_queue_months": 9,
+      "renewable_pct": 52
+    },
+    "hazard": {
+      "flood_risk": "medium",
+      "seismic_risk": "low",
+      "storm_risk": "medium"
+    },
+    "geo": {
+      "latency_ms": 14,
+      "km_to_major_metro": 30,
+      "fiber_routes": 3
+    },
+    "permitting": {
+      "incentive_value": "high",
+      "permit_complexity": "low",
+      "water_availability": "medium"
+    },
+    "profile_text": "Cheap ERCOT power with high wind and solar penetration and an unusually short interconnection queue, since ERCOT is a standalone grid with faster energization than the eastern interconnects. Streamlined Texas permitting and strong incentives. Main watch items are summer heat driving cooling load, medium flash-flood exposure, and constrained long-term water supply."
+  },
+  {
+    "site_id": "site-c",
+    "name": "Quincy, WA - West US 2 adjacency",
+    "region": "Pacific Northwest",
+    "azure_region_intent": "Low-cost hydro capacity near West US 2",
+    "power": {
+      "cost_per_kwh": 0.034,
+      "grid_capacity_mw": 220,
+      "interconnection_queue_months": 26,
+      "renewable_pct": 88
+    },
+    "hazard": {
+      "flood_risk": "low",
+      "seismic_risk": "medium",
+      "storm_risk": "low"
+    },
+    "geo": {
+      "latency_ms": 22,
+      "km_to_major_metro": 95,
+      "fiber_routes": 2
+    },
+    "permitting": {
+      "incentive_value": "medium",
+      "permit_complexity": "medium",
+      "water_availability": "high"
+    },
+    "profile_text": "Rural central-Washington site with very cheap, nearly all-hydro power and a cool, dry climate ideal for free cooling. Downsides are distance from a major metro (higher latency, thinner fiber) and a long transmission interconnection queue tied to a needed substation upgrade. Cascadia seismic exposure is moderate. Novel location with few nearby comparable builds."
+  },
+  {
+    "site_id": "site-d",
+    "name": "Phoenix, AZ - West US 3 expansion",
+    "region": "Southwest",
+    "azure_region_intent": "Capacity for West US 3",
+    "power": {
+      "cost_per_kwh": 0.058,
+      "grid_capacity_mw": 300,
+      "interconnection_queue_months": 18,
+      "renewable_pct": 44
+    },
+    "hazard": {
+      "flood_risk": "low",
+      "seismic_risk": "low",
+      "storm_risk": "low"
+    },
+    "geo": {
+      "latency_ms": 10,
+      "km_to_major_metro": 20,
+      "fiber_routes": 5
+    },
+    "permitting": {
+      "incentive_value": "high",
+      "permit_complexity": "medium",
+      "water_availability": "low"
+    },
+    "profile_text": "Established Phoenix-area data-center market with excellent fiber density, very low natural-hazard exposure, and strong incentives. Latency is low thanks to proximity to metro peering. The dominant risk is water: arid climate and tightening groundwater rules make water-based cooling contentious, pushing designs toward air or closed-loop cooling and lengthening environmental permitting."
+  },
+  {
+    "site_id": "site-e",
+    "name": "Atlanta, GA - East US expansion",
+    "region": "Southeast",
+    "azure_region_intent": "Edge/latency relief for East US",
+    "power": {
+      "cost_per_kwh": 0.066,
+      "grid_capacity_mw": 260,
+      "interconnection_queue_months": 20,
+      "renewable_pct": 30
+    },
+    "hazard": {
+      "flood_risk": "medium",
+      "seismic_risk": "low",
+      "storm_risk": "medium"
+    },
+    "geo": {
+      "latency_ms": 8,
+      "km_to_major_metro": 15,
+      "fiber_routes": 6
+    },
+    "permitting": {
+      "incentive_value": "medium",
+      "permit_complexity": "high",
+      "water_availability": "medium"
+    },
+    "profile_text": "Premier Southeast interconnection hub: the lowest latency and richest fiber of any candidate, close to a major metro. Trade-offs are higher power cost, a low-renewable grid mix, and complex multi-jurisdiction permitting that historically slows approvals. Medium exposure to remnant tropical storms and localized flooding."
+  },
+  {
+    "site_id": "site-f",
+    "name": "Des Moines, IA - Central US expansion",
+    "region": "Midwest",
+    "azure_region_intent": "Renewable-heavy capacity for Central US",
+    "power": {
+      "cost_per_kwh": 0.047,
+      "grid_capacity_mw": 320,
+      "interconnection_queue_months": 24,
+      "renewable_pct": 70
+    },
+    "hazard": {
+      "flood_risk": "medium",
+      "seismic_risk": "low",
+      "storm_risk": "high"
+    },
+    "geo": {
+      "latency_ms": 16,
+      "km_to_major_metro": 35,
+      "fiber_routes": 3
+    },
+    "permitting": {
+      "incentive_value": "high",
+      "permit_complexity": "low",
+      "water_availability": "high"
+    },
+    "profile_text": "Iowa site with abundant low-cost wind power and generous incentives; a favored region for hyperscale builds. Cool climate aids cooling and water is plentiful. The two concerns are a long wind-driven interconnection queue (MISO study backlog) and high severe-weather exposure, including tornado and hail risk that raises hardening costs."
+  }
+]
