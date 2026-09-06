@@ -30,6 +30,7 @@ Run standalone:  python agents.py
 
 import course_server as srv     # reuse the MCP tools + helpers (M1-4)
 import reasoning                 # Tree-of-Thoughts (M4)
+import guardrails                # hard output rules + escalation (M6)
 
 _SOURCES = ("power", "hazard", "geo", "permitting")
 
@@ -101,7 +102,7 @@ class Critic:
     def __init__(self, verbose: bool = False):
         self.verbose = verbose
 
-    def run(self, research: dict, analysis: dict) -> dict:
+    def run(self, research: dict, analysis: dict, guard: dict) -> dict:
         trace, reasons, serious = [], [], False
         forecast = analysis["forecast"]
 
@@ -112,11 +113,10 @@ class Critic:
         if not forecast["hits"]:
             reasons.append("no comparable precedent -- timeline/risk are live-data-only")
 
-        # A 'Strong' label must be earned. It should never survive High risk or
-        # a missing precedent; if it somehow does, that is a serious defect.
-        if forecast["recommendation"] == "Strong candidate" and \
-                (forecast["risk_tier"] == "High" or not forecast["hits"]):
-            reasons.append("'Strong candidate' not fully supported (high risk or ungrounded)")
+        # The guardrail already enforces the 'Strong' rule; the Critic just
+        # notes that it fired, so the two never contradict each other.
+        if guard["downgraded"]:
+            reasons.append("guardrail downgraded an unsupported 'Strong'")
             serious = True
 
         # A score sitting on a recommendation boundary is fragile.
@@ -149,27 +149,68 @@ class Orchestrator:
     def evaluate_site(self, site_id: str, fail_source: str = None) -> dict:
         research = self.researcher.run(site_id, fail_source=fail_source)
         analysis = self.analyst.run(research)
-        review = self.critic.run(research, analysis)
         f = analysis["forecast"]
+
+        # M6 GUARDRAILS: enforce the output rules (may downgrade the rec).
+        source_failed = bool(research["flags"])
+        guard = guardrails.guard_output(f, source_failed)
+        final_rec = guard["recommendation"]
+        if guard["actions"]:
+            _trace(analysis["trace"], self.verbose,
+                   "[Guardrail] " + " | ".join(guard["actions"]))
+
+        # Independent review, aware of what the guardrail did.
+        review = self.critic.run(research, analysis, guard)
+
+        # M6 ESCALATION: does this need a human before it ships?
+        needs_human, hitl_reasons = guardrails.needs_human_review(
+            final_rec, review["confidence"], guard)
+
         return {
             "site_id": site_id,
             "site_name": research["site_name"],
             "score": f["score"],
             "timeline_months": f["timeline_months"],
             "risk_tier": f["risk_tier"],
-            "recommendation": f["recommendation"],
+            "recommendation": final_rec,
             "top_risk": analysis["mitigation"]["top_risk"],
             "mitigation": analysis["mitigation"]["chosen"]["name"],
+            "guardrail_actions": guard["actions"],
             "verdict": review["verdict"],
             "confidence": review["confidence"],
             "reasons": review["reasons"],
             "flags": research["flags"],
+            "human_review_required": needs_human,
+            "hitl_reasons": hitl_reasons,
+            "human_decision": "pending",
             "trace": research["trace"] + analysis["trace"] + review["trace"],
         }
 
     def evaluate_all(self) -> list[dict]:
         records = [self.evaluate_site(sid) for sid in srv._load_sites()]
         records.sort(key=lambda r: r["score"], reverse=True)
+        return records
+
+    # -----------------------------------------------------------------------
+    # M6 HUMAN-IN-THE-LOOP GATE (Task 10). Records that need a human do not
+    # ship until one approves. `responder` is injectable so it is testable;
+    # in a real run it is input(). interactive=False defers (marks 'pending').
+    # -----------------------------------------------------------------------
+    def review_gate(self, records: list[dict], interactive: bool = True, responder=input) -> list[dict]:
+        for r in records:
+            if not r["human_review_required"]:
+                r["human_decision"] = "auto-approved"
+                continue
+            if not interactive:
+                r["human_decision"] = "pending"
+                continue
+            answer = responder(
+                f"REVIEW REQUIRED -- {r['site_name']} -> {r['recommendation']}\n"
+                f"  why: {'; '.join(r['hitl_reasons'])}\n"
+                f"  Approve this recommendation? [y/n] "
+            )
+            r["human_decision"] = "approved" if str(answer).strip().lower().startswith("y") else "held"
+            _trace(r["trace"], self.verbose, f"[Human] {r['site_id']} -> {r['human_decision']}")
         return records
 
 
@@ -181,17 +222,25 @@ def render_site(rec: dict) -> str:
         f"{rec['site_name']} ({rec['site_id']})",
         f"  score {rec['score']}/100, {rec['timeline_months']} mo, {rec['risk_tier']} risk -- {rec['recommendation']}",
         f"  top risk: {rec['top_risk']}; recommended mitigation: {rec['mitigation']}",
-        f"  critic: {rec['verdict']} (confidence {rec['confidence']})"
-        + (f" -- {'; '.join(rec['reasons'])}" if rec["reasons"] else ""),
     ]
+    if rec.get("guardrail_actions"):
+        lines.append(f"  guardrail: {' | '.join(rec['guardrail_actions'])}")
+    lines.append(
+        f"  critic: {rec['verdict']} (confidence {rec['confidence']})"
+        + (f" -- {'; '.join(rec['reasons'])}" if rec["reasons"] else "")
+    )
+    if rec["human_review_required"]:
+        lines.append(f"  HUMAN REVIEW REQUIRED: {'; '.join(rec['hitl_reasons'])}"
+                     f" [decision: {rec['human_decision']}]")
     return "\n".join(lines)
 
 
 def render_ranking(records: list[dict]) -> str:
     lines = [f"Ranked shortlist ({len(records)} sites):"]
     for i, r in enumerate(records, 1):
+        tag = "  <REVIEW>" if r["human_review_required"] else ""
         lines.append(f"  {i}. {r['site_name']} ({r['site_id']}): {r['score']}/100, "
-                     f"{r['risk_tier']} risk, critic {r['verdict']} -- {r['recommendation']}")
+                     f"{r['risk_tier']} risk, critic {r['verdict']} -- {r['recommendation']}{tag}")
     return "\n".join(lines)
 
 
@@ -201,4 +250,7 @@ if __name__ == "__main__":
     rec = orch.evaluate_site("site-c", fail_source="hazard")
     print("\n" + render_site(rec))
     print("\n=== Full autonomous sweep ===")
-    print(render_ranking(orch.evaluate_all()))
+    records = orch.evaluate_all()
+    print(render_ranking(records))
+    print(f"\n{sum(r['human_review_required'] for r in records)} site(s) need human review "
+          f"(run main.py to approve them interactively).")
