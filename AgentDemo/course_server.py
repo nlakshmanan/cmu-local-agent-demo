@@ -175,6 +175,16 @@ def _permitting_score(permitting: dict) -> float:
     return round(_clamp(incentive - complexity_penalty - water_penalty), 1)
 
 
+def _recommend(score: float, risk_tier: str) -> str:
+    """The recommendation label from a score + risk tier. One rule, reused by
+    the live score and the precedent-grounded forecast so they never disagree."""
+    if score >= 72 and risk_tier != "High":
+        return "Strong candidate"
+    if score >= 55:
+        return "Conditional -- mitigate the top risk before committing capital"
+    return "Weak / deprioritize"
+
+
 def _score(site: dict) -> dict:
     """The whole deterministic scoring model for one site. Returned as a dict
     so both score_site (text) and chart_sites (bars) can reuse it."""
@@ -193,12 +203,7 @@ def _score(site: dict) -> dict:
     # Risk tier straight from the weighted score.
     risk_tier = "Low" if total >= 75 else ("Medium" if total >= 55 else "High")
 
-    if total >= 72 and risk_tier != "High":
-        rec = "Strong candidate"
-    elif total >= 55:
-        rec = "Conditional -- mitigate the top risk before committing capital"
-    else:
-        rec = "Weak / deprioritize"
+    rec = _recommend(total, risk_tier)
 
     return {
         "subscores": subscores,
@@ -450,6 +455,30 @@ def chart_sites(target: str = "all") -> str:
 _RISK_ORDER = ["Low", "Medium", "High"]
 
 
+def grounded_forecast(site: dict) -> dict:
+    """Precedent-grounded forecast for one site, as structured data.
+
+    Base weighted score, then the retrieved-precedent signal applied to score,
+    timeline, and risk tier. Both the forecast_site tool (text) and the
+    multi-agent Analyst (agents.py) call this, so they never disagree.
+    """
+    base = _score(site)
+    hits = _RETRIEVER.query(site["profile_text"])
+    sig = retrieval.precedent_signal_from(hits)
+    score = round(_clamp(base["score"] - sig.get("score_penalty", 0)), 1)
+    timeline = base["timeline_months"] + sig.get("timeline_add_months", 0)
+    risk_tier = _RISK_ORDER[min(2, _RISK_ORDER.index(base["risk_tier"]) + sig.get("risk_bump", 0))]
+    return {
+        "base": base,
+        "hits": hits,
+        "signal": sig,
+        "score": score,
+        "timeline_months": timeline,
+        "risk_tier": risk_tier,
+        "recommendation": _recommend(score, risk_tier),
+    }
+
+
 @server.tool()
 def find_precedents(site: str) -> str:
     """Retrieve comparable PAST data-center builds for ONE site, showing how
@@ -496,21 +525,9 @@ def forecast_site(site: str) -> str:
     if sid is None:
         return f"No site matching '{site}'. Known sites: {', '.join(s['name'] for s in sites.values())}"
     s = sites[sid]
-    base = _score(s)
-    hits = _RETRIEVER.query(s["profile_text"])
-    sig = retrieval.precedent_signal_from(hits)
-
-    score = round(_clamp(base["score"] - sig.get("score_penalty", 0)), 1)
-    timeline = base["timeline_months"] + sig.get("timeline_add_months", 0)
-    risk_idx = min(2, _RISK_ORDER.index(base["risk_tier"]) + sig.get("risk_bump", 0))
-    risk_tier = _RISK_ORDER[risk_idx]
-
-    if score >= 72 and risk_tier != "High":
-        rec = "Strong candidate"
-    elif score >= 55:
-        rec = "Conditional -- mitigate the top risk before committing capital"
-    else:
-        rec = "Weak / deprioritize"
+    f = grounded_forecast(s)
+    base, hits, score = f["base"], f["hits"], f["score"]
+    timeline, risk_tier = f["timeline_months"], f["risk_tier"]
 
     lines = [f"Grounded forecast for {s['name']} ({sid}) [retrieval: {_RETRIEVER.mode}]:"]
     if not hits:
@@ -527,9 +544,9 @@ def forecast_site(site: str) -> str:
         lines.append(f"  score: {base['score']} -> {score}/100")
         lines.append(f"  timeline: {base['timeline_months']} -> {timeline} months")
         lines.append(f"  risk tier: {base['risk_tier']} -> {risk_tier}")
-        if sig.get("reason"):
-            lines.append(f"  grounded by: {sig['reason']}")
-    lines.append(f"  recommendation: {rec}")
+        if f["signal"].get("reason"):
+            lines.append(f"  grounded by: {f['signal']['reason']}")
+    lines.append(f"  recommendation: {f['recommendation']}")
     return "\n".join(lines)
 
 
