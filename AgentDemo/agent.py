@@ -314,10 +314,14 @@ def decide(system_prompt: str, user_text: str, schema: dict) -> dict:
         "cannot answer the question is worse than no tool at all -- the "
         "site data knows nothing about my budget, board politics, or my "
         "schedule.\n"
-        'Note: for how good a site is, its score, timeline, or risk, use '
-        "score_site (never estimate those yourself). For one raw figure use "
-        "get_power / get_hazard / get_geo / get_permitting; to compare or rank "
-        "every site use list_sites; for a chart use chart_sites.\n"
+        'Note: for a real recommendation -- whether to build, the realistic '
+        "timeline, or the risk -- use forecast_site (it grounds the score in "
+        "comparable past builds). Use score_site for a quick live-data-only "
+        "score with no history, and find_precedents to look up comparable past "
+        "projects. To de-risk a site or weigh mitigation options, use "
+        "plan_mitigation. Never estimate any of these numbers yourself. For one raw "
+        "figure use get_power / get_hazard / get_geo / get_permitting; to "
+        "compare or rank every site use list_sites; for a chart use chart_sites.\n"
         "Put the tool's arguments in `args` (use {} if it takes none).\n"
         "Keep `reasoning` to one short sentence."
     )

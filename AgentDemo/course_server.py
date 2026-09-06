@@ -50,6 +50,9 @@ from typing import Optional
 
 from mcp.server import MCPServer
 
+import retrieval   # Module 3: RAG grounding over data/past_projects.json
+import reasoning    # Module 4: Tree-of-Thoughts mitigation planning
+
 # The server's name. Shows up in client UIs.
 server = MCPServer("siting-tools")
 
@@ -75,6 +78,9 @@ except Exception:
     # ---- MODIFY HERE (fallback only; edit config.py, not this) ----
     CRITERION_WEIGHTS = {"power": 0.35, "connectivity": 0.20, "hazard": 0.25, "permitting": 0.20}
     BASE_BUILD_MONTHS = 18
+
+# Build the retriever once at startup and reuse it (Module 3 long-term store).
+_RETRIEVER = retrieval.PrecedentRetriever()
 
 
 # ---------------------------------------------------------------------------
@@ -434,6 +440,115 @@ def chart_sites(target: str = "all") -> str:
 
     # The GUI watches for this marker line and renders the PNG in the chat.
     return f"CHART_SAVED: {path}\nThe chart plots:\n" + "\n".join(plotted)
+
+
+# ===========================================================================
+# RETRIEVAL TOOLS (Module 3) -- ground a forecast in comparable PAST builds.
+# score_site is live-data-only. forecast_site adds history: it retrieves
+# comparable closeouts and lets a repeated overrun pattern move the number.
+# ===========================================================================
+_RISK_ORDER = ["Low", "Medium", "High"]
+
+
+@server.tool()
+def find_precedents(site: str) -> str:
+    """Retrieve comparable PAST data-center builds for ONE site, showing how
+    each turned out (on time, or overran and by how many months).
+
+    Use this when the user asks for precedent, comparable past projects, prior
+    builds, track record, or 'what happened last time' for a site. For the full
+    grounded assessment that also adjusts the score, use forecast_site.
+    """
+    sites = _load_sites()
+    sid = _find_site(sites, site)
+    if sid is None:
+        return f"No site matching '{site}'. Known sites: {', '.join(s['name'] for s in sites.values())}"
+    s = sites[sid]
+    hits = _RETRIEVER.query(s["profile_text"])
+    if not hits:
+        return (f"No comparable precedent for {s['name']} ({sid}) above the "
+                f"similarity threshold. Its forecast is live-data-only, lower confidence.")
+    lines = [f"Comparable past builds for {s['name']} ({sid}) "
+             f"[retrieval mode: {_RETRIEVER.mode}]:"]
+    for h in hits:
+        outcome = (f"overran by {h['grid_slip_months']} months" if h["outcome"] == "overran"
+                   else "on time")
+        lines.append(f"  - [{h['similarity']}] {h['title']} ({h['region']}): {outcome}")
+    sig = retrieval.precedent_signal_from(hits)
+    if sig.get("reason"):
+        lines.append(f"Signal: {sig['reason']}")
+    return "\n".join(lines)
+
+
+@server.tool()
+def forecast_site(site: str) -> str:
+    """Grounded forecast for ONE site: the weighted score ADJUSTED by what
+    happened on comparable past builds (retrieved precedent), plus the final
+    timeline, risk tier, and recommendation, with the precedent cited.
+
+    Use this for a real build recommendation, or whenever the user asks whether
+    to build, how long it will really take, or what the risk is. This is
+    score_site PLUS historical grounding. Use score_site only for a quick
+    live-data-only score with no precedent.
+    """
+    sites = _load_sites()
+    sid = _find_site(sites, site)
+    if sid is None:
+        return f"No site matching '{site}'. Known sites: {', '.join(s['name'] for s in sites.values())}"
+    s = sites[sid]
+    base = _score(s)
+    hits = _RETRIEVER.query(s["profile_text"])
+    sig = retrieval.precedent_signal_from(hits)
+
+    score = round(_clamp(base["score"] - sig.get("score_penalty", 0)), 1)
+    timeline = base["timeline_months"] + sig.get("timeline_add_months", 0)
+    risk_idx = min(2, _RISK_ORDER.index(base["risk_tier"]) + sig.get("risk_bump", 0))
+    risk_tier = _RISK_ORDER[risk_idx]
+
+    if score >= 72 and risk_tier != "High":
+        rec = "Strong candidate"
+    elif score >= 55:
+        rec = "Conditional -- mitigate the top risk before committing capital"
+    else:
+        rec = "Weak / deprioritize"
+
+    lines = [f"Grounded forecast for {s['name']} ({sid}) [retrieval: {_RETRIEVER.mode}]:"]
+    if not hits:
+        lines.append("  precedent: NONE above threshold -- live-data-only, lower confidence")
+        lines.append(f"  score: {score}/100    timeline: {timeline} months    risk: {risk_tier}")
+    else:
+        cited = "; ".join(
+            f"{h['title']} ("
+            + (f"overran {h['grid_slip_months']}mo" if h["outcome"] == "overran" else "on time")
+            + ")"
+            for h in hits
+        )
+        lines.append(f"  precedent retrieved: {cited}")
+        lines.append(f"  score: {base['score']} -> {score}/100")
+        lines.append(f"  timeline: {base['timeline_months']} -> {timeline} months")
+        lines.append(f"  risk tier: {base['risk_tier']} -> {risk_tier}")
+        if sig.get("reason"):
+            lines.append(f"  grounded by: {sig['reason']}")
+    lines.append(f"  recommendation: {rec}")
+    return "\n".join(lines)
+
+
+# ===========================================================================
+# REASONING TOOL (Module 4) -- Tree-of-Thoughts mitigation planning.
+# The branch/score/select logic lives in reasoning.py; this tool exposes it so
+# the agent can call it and the explored branches appear in the trace.
+# ===========================================================================
+@server.tool()
+def plan_mitigation(site: str) -> str:
+    """Recommend how to DE-RISK one site: identify its single top risk, explore
+    2-3 candidate mitigation strategies (Tree-of-Thoughts), weigh each on
+    effectiveness, cost, and months of relief, and recommend the best one.
+
+    Use this when the user asks how to mitigate, de-risk, fix, or improve a
+    site, what the options are, or what to do about its biggest risk. For the
+    site's assessment itself use forecast_site.
+    """
+    return reasoning.render(reasoning.tree_of_thoughts(site))
 
 
 if __name__ == "__main__":
