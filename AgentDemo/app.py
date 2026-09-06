@@ -86,7 +86,7 @@ def render_memory() -> str:
     memories = memory.load()
     header = f"### Long-term memory\n`{len(memories)}` fact(s) in `{config.MEMORY_FILE}`\n\n"
     if not memories:
-        return header + "_empty — tell the agent something the gradebook doesn't know (an accommodation, a circumstance, a preference)_"
+        return header + "_empty — tell the agent a priority the tools don't know (a constraint, a preference, a must-have)_"
     return header + "\n".join(f"- **#{m['id']}** {m['text']}" for m in memories)
 
 
@@ -179,8 +179,8 @@ def fill_context(messages):
 # ---------------------------------------------------------------------------
 with gr.Blocks(title="Local Agent Demo") as demo:
     gr.Markdown(
-        f"# Teacher's Assistant — Local Agent Demo &nbsp;·&nbsp; `{config.MODEL}`\n"
-        "An agent for a professor: gradebook tools over **MCP** · **short-term** vs "
+        f"# Data-Center Site Forecaster — Local Agent Demo &nbsp;·&nbsp; `{config.MODEL}`\n"
+        "An agent for data-center site selection: siting tools over **MCP** · **short-term** vs "
         "**long-term** memory · **skills** with progressive disclosure. "
         "100% local, no API keys."
     )
@@ -196,7 +196,7 @@ with gr.Blocks(title="Local Agent Demo") as demo:
             chatbot = gr.Chatbot(height=460, show_label=False)
             with gr.Row():
                 msg_box = gr.Textbox(
-                    placeholder="Ask about a student or the class, request a chart, or share context only you'd know...",
+                    placeholder="Ask about a candidate site, request a forecast or chart, or share a priority only you'd know...",
                     show_label=False,
                     scale=8,
                     autofocus=True,

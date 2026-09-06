@@ -2,7 +2,7 @@
 config.py — Every knob in the system, in one place.
 
 If you want to change how the demo behaves, change it HERE first.
-Students: this is the file to experiment with before touching anything else.
+Note: this is the file to experiment with before touching anything else.
 """
 
 # ---------------------------------------------------------------------------
@@ -22,7 +22,7 @@ INTENDED_USER = "Leadership team of a cloud data-center business (executive deci
 # Leadership priorities. Each weight says how much a criterion contributes to a
 # site's final 0-100 score. Re-weight these and the ranking shifts instantly --
 # that is leadership saying "power matters more than permitting" in numbers.
-# They MUST sum to 1.0. The scoring tool (course_server.py) imports these.
+# They MUST sum to 1.0. The scoring tool (forecaster_server.py) imports these.
 #
 # ---- MODIFY HERE ----
 CRITERION_WEIGHTS = {
@@ -96,7 +96,7 @@ RETRIEVAL_TOP_K = 3
 # in memory forever, contradicting each other.
 #
 # ---- MODIFY HERE ----
-# Tuned from real measured runs, and worth showing students how. Against
+# Tuned from real measured runs, and worth showing how. Against
 # "Priya has an extended-time accommodation for exams":
 #   0.85  "Priya no longer needs the accommodation"  <- REAL conflict, must update
 #   0.71  "Priya is dealing with a family emergency" <- merely related, must NOT
@@ -118,7 +118,7 @@ MAX_TOOL_STEPS = 3
 MAX_DECISION_TOKENS = 200
 
 # The MCP server we launch as a subprocess. Add more servers here later.
-MCP_SERVER_SCRIPT = "course_server.py"
+MCP_SERVER_SCRIPT = "forecaster_server.py"
 
 # Where SKILL.md files live.
 SKILLS_DIR = "skills"

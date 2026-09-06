@@ -40,7 +40,7 @@ flowchart TD
     U -->|"conversation"| APP["app.py — chat agent (M2)"]
     U -->|"autonomous batch"| MAIN["main.py — entrypoint"]
 
-    subgraph SERVER["course_server.py — MCP tool server"]
+    subgraph SERVER["forecaster_server.py — MCP tool server"]
       direction TB
       T1["get_power / get_hazard / get_geo / get_permitting (M1)"]
       T2["score_site — weighted score (M1/M2)"]
@@ -70,7 +70,7 @@ flowchart TD
 
 | Module | Concept | File(s) |
 |---|---|---|
-| M1 | Goal, user, leadership priorities, tools | `config.py`, `course_server.py` (data tools) |
+| M1 | Goal, user, leadership priorities, tools | `config.py`, `forecaster_server.py` (data tools) |
 | M2 | Reasoning loop + memory | `agent.py`, `memory.py` |
 | M3 | Retrieval grounding (RAG) | `retrieval.py`, `forecast_site`/`find_precedents` |
 | M4 | Advanced reasoning (Tree-of-Thoughts) | `reasoning.py`, `plan_mitigation` |
@@ -167,7 +167,7 @@ cmu-local-agent-demo/
 └── AgentDemo/
     ├── app.py                 # interactive chat UI (Gradio + Ollama)
     ├── agent.py               # the reasoning loop (M2)
-    ├── course_server.py       # MCP tool server: data + scoring + forecast + mitigation
+    ├── forecaster_server.py       # MCP tool server: data + scoring + forecast + mitigation
     ├── retrieval.py           # RAG precedent grounding (M3)
     ├── reasoning.py           # Tree-of-Thoughts mitigation (M4)
     ├── agents.py              # Researcher / Analyst / Critic / Orchestrator (M5)

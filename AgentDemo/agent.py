@@ -131,7 +131,7 @@ REQUEST_WORDS = (
 
 
 def skills_on_offer(user_text: str, skills: list[dict]) -> list[dict]:
-    """Only offer skills when the teacher is actually asking for something."""
+    """Only offer skills when the user is actually asking for something."""
     return skills if any(w in user_text.lower() for w in REQUEST_WORDS) else []
 
 
@@ -527,19 +527,19 @@ def run_turn(mcp, messages: list[dict], user_text: str, retrieval_mode: str):
             path = first_line.removeprefix("CHART_SAVED: ").strip()
             # Only show each chart once. `chart_grades({})` and
             # `chart_grades({"target": "class"})` are different signatures to
-            # the repeat-guard above but render the same PNG, and the teacher
+            # the repeat-guard above but render the same PNG, and the user
             # does not want the same image twice in the chat.
             if path not in charts_shown:
                 charts_shown.add(path)
                 yield ("chart", path)
-            result = "(Chart rendered -- it is already displayed to the teacher.)\n" + rest
+            result = "(Chart rendered -- it is already displayed to the user.)\n" + rest
 
         observations.append((tool, result))
         yield ("trace", f"&nbsp;&nbsp;&nbsp;&nbsp;-> {result[:200]}")
 
     # === 4. ANSWER (streaming) ===========================================
     # Same shape as decide(): history lives in the system prompt, and the only
-    # live message is what the teacher actually just asked.
+    # live message is what the user actually just asked.
     system_prompt = build_system_prompt(
         mcp.tools, memories, skills, loaded_skills, observations, history
     )

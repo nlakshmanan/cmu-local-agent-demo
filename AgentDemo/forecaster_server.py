@@ -1,5 +1,5 @@
 """
-course_server.py -- An MCP server (data-center SITING tools).
+forecaster_server.py -- An MCP server (data-center SITING tools).
 
 WHAT IS THIS FILE?
 ------------------
@@ -39,7 +39,7 @@ comment. It is the prompt the model reads to decide whether to call the tool.
 Write docstrings like instructions, because that is what they are.
 
 RUN IT STANDALONE (to prove it's a real server):
-    python course_server.py
+    python forecaster_server.py
     (it waits for JSON-RPC on stdin -- Ctrl+C to quit)
 """
 
@@ -100,7 +100,7 @@ def _load_sites() -> dict:
 
 
 def _find_site(sites: dict, name: str) -> Optional[str]:
-    """Forgiving lookup. Small models are sloppy, and a teacher-style user says
+    """Forgiving lookup. Small models are sloppy, and a user-style user says
     'Quincy' or 'site c', not 'site-c'. Match the id, the full name, any word
     in the name, or a prefix. Returns the canonical site_id or None."""
     name = (name or "").strip().lower()
@@ -317,7 +317,7 @@ def score_site(site: str) -> str:
     connectivity, hazard, and permitting, plus an estimated build timeline in
     months, a risk tier, and a recommendation.
 
-    Use this whenever the teacher asks how good a site is, whether to build
+    Use this whenever the user asks how good a site is, whether to build
     there, its score, its timeline, or its risk. Never estimate any of these
     numbers yourself -- this tool applies the exact leadership weights to every
     criterion. For one raw criterion use get_power / get_hazard / get_geo /
@@ -354,7 +354,7 @@ def list_sites() -> str:
     """List EVERY candidate site with its weighted score, timeline, and risk
     tier, ranked best-first -- one line each.
 
-    Use this when the teacher asks for all the sites, the shortlist, the
+    Use this when the user asks for all the sites, the shortlist, the
     ranking, or wants to compare sites. For one site's full breakdown use
     score_site.
     """
@@ -381,9 +381,9 @@ def list_sites() -> str:
 # ===========================================================================
 @server.tool()
 def chart_sites(target: str = "all") -> str:
-    """Draw a bar chart as a PNG and display it to the teacher.
+    """Draw a bar chart as a PNG and display it to the user.
 
-    Use this whenever the teacher asks for a chart, graph, plot, or any visual
+    Use this whenever the user asks for a chart, graph, plot, or any visual
     of the sites. Pass "all" (the default) to chart the weighted score of every
     site side by side (the ranking). Pass a single site's name to chart that
     site's four sub-scores (power, connectivity, hazard, permitting).

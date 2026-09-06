@@ -108,7 +108,7 @@ def _mcp_server():
 
 
 if server_up:
-    check("MCP server", _mcp_server, "Check course_server.py for syntax errors")
+    check("MCP server", _mcp_server, "Check forecaster_server.py for syntax errors")
 
 
 # --- summary ---------------------------------------------------------------

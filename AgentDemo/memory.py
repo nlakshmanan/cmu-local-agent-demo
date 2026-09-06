@@ -67,43 +67,42 @@ def cosine(a, b) -> float:
 # ---------------------------------------------------------------------------
 # 1. EXTRACT — "did we learn anything worth keeping?"
 # ---------------------------------------------------------------------------
-EXTRACT_PROMPT = """You extract durable facts from a conversation. The user is
-a university teacher; they may state facts about THEMSELVES or about a STUDENT.
+EXTRACT_PROMPT = """You extract durable facts from a conversation. The user leads
+data-center site selection; they may state facts about THEIR OWN priorities and
+constraints, or about a specific SITE or REGION.
 
 Only extract a fact the USER explicitly stated that will still be true next
-week and that does NOT live in the gradebook.
+week and that does NOT already live in the site tools.
 
 EXTRACT (example names only -- never copy a fact from these examples):
-  "I teach the 8am section."   -> The user teaches the 8am section.
-  "Nadia has an extended-time accommodation for exams."
-                               -> Nadia has an extended-time accommodation for exams.
-  "Omar emailed me -- he's been dealing with an injury."
-                               -> Omar has been dealing with an injury.
-  "I have a dentist appointment Tuesday so I'll cancel office hours."
-                               -> The user has a dentist appointment Tuesday and
-                                  is cancelling office hours that day.
-  "I have an important meeting Friday so I will miss class."
-                               -> The user has an important meeting Friday and
-                                  will miss class.
+  "We weight power more than permitting this cycle."
+                               -> The user weights power over permitting this cycle.
+  "Any site over 40 months to energize is a no-go for us."
+                               -> The user rules out any site over 40 months to energize.
+  "Legal flagged Phoenix over the water debate."
+                               -> Phoenix carries legal/water risk that was flagged.
+  "We need human sign-off before committing capital to a site."
+                               -> The user requires human sign-off before committing capital.
+  "We're avoiding Texas this year because of grid risk."
+                               -> The user is avoiding Texas this year because of grid risk.
 
 KEEP THE REASON. If the user says WHY something is happening, that reason is
 the most useful half of the fact -- never drop it. This works in BOTH
 directions, and the second one is the one that gets missed:
-  "I'll miss class because of a conference"  (reason second)
-  "I have a conference, so I'll miss class"  (reason FIRST -- keep it anyway)
-Both must keep the conference. Never reduce either to "The user will miss
-class". A fact stored without its reason makes the agent invent one later.
+  "we're avoiding Texas because of grid risk"  (reason second)
+  "grid risk is why we're avoiding Texas"       (reason FIRST -- keep it anyway)
+Both must keep the grid-risk reason. Never reduce either to "The user is
+avoiding Texas". A fact stored without its reason makes the agent invent one later.
 
-Record what the user TOLD you, not how they told you. "Marcus emailed me, he
-has a concussion" is a fact about Marcus's concussion -- not a fact about the
+Record what the user TOLD you, not how they told you. "Legal emailed me, Phoenix
+has a water problem" is a fact about Phoenix's water risk -- not a fact about the
 user receiving email.
 
 DO NOT EXTRACT (return an empty list for all of these):
-  "How is Sam doing?"          -> a question, not a fact
-  "Chart the class average."   -> a request, not a fact
-  "Show me how Sam compares to the class."
-                               -> a request, not a fact about Sam
-  "What is 12 * 40?"           -> a task, not a fact
+  "Score Quincy."              -> a request, not a fact
+  "Which site ranks first?"    -> a question, not a fact
+  "Chart the sites."           -> a request, not a fact
+  "Forecast Phoenix."          -> a request, not a fact
   anything YOU said, however useful it sounded
   anything about what the user wants RIGHT NOW
 
@@ -111,14 +110,14 @@ Never write a fact about the user "wanting", "asking for", "being interested
 in", "preparing for", or "needing" something. Those describe this moment,
 not the person.
 
-Never record data that came from a tool -- grades, averages, attendance,
-due dates. It goes stale the moment the gradebook changes, and the agent can
-always just call the tool again. Memory is for context ONLY the teacher could
-have told you: circumstances, accommodations, preferences, history.
+Never record data that came from a tool -- scores, timelines, risk tiers, power
+costs, queue lengths. It goes stale the moment the data changes, and the agent
+can always just call the tool again. Memory is for context ONLY the user could
+have told you: priorities, constraints, preferences, politics, history.
 
 Write each fact as one third-person sentence -- short, but never at the cost
-of the reason. Facts about the teacher start with "The user"; facts about a
-student start with the student's name.
+of the reason. Facts about the user start with "The user"; facts about a site
+start with the site's name.
 Most exchanges contain NOTHING durable. An empty list is the correct and
 common answer -- prefer it when unsure.
 
@@ -128,8 +127,8 @@ Never extract a fact out of the assistant's reply on its own.
 
 EXCEPTION -- if the user explicitly asks you to remember, note, or not forget
 something, always extract it. Resolve what they meant from the reply and write
-it out in full. "Remember them." after a list of deadlines becomes:
-  The user wants to keep track of these deadlines: HW4 due 2026-09-05, ...
+it out in full. "Remember that." after naming a constraint becomes:
+  The user requires human sign-off before committing capital to a site.
 An explicit request overrides every other rule above."""
 
 
@@ -228,7 +227,7 @@ def extract_facts(user_msg: str, assistant_msg: str = "") -> list[str]:
             # NOTE: an earlier version also filtered "today"/"this friday"/etc,
             # reasoning that facts pinned to a day go stale. That was WRONG and
             # it broke a real case: "I have a meeting this Friday so I'll miss
-            # class" is exactly the kind of thing a teacher needs remembered.
+            # class" is exactly the kind of thing a user needs remembered.
             # A filter that blocks junk AND the good stuff is worse than no
             # filter. Keep these lists narrow -- match on the shape of a
             # non-fact ("wants to", "is asking"), never on its subject matter.
@@ -259,7 +258,7 @@ def extract_facts(user_msg: str, assistant_msg: str = "") -> list[str]:
 # ---------------------------------------------------------------------------
 # 2. RECONCILE — the part everyone forgets
 # ---------------------------------------------------------------------------
-# Naive memory systems APPEND. So the teacher says "Priya has an extended-time
+# Naive memory systems APPEND. So the user says "Priya has an extended-time
 # accommodation", then later "Priya's accommodation ended", and now memory
 # holds both. The agent gets confused and the user loses trust.
 #

@@ -16,7 +16,7 @@ each other, so each has one job and the handoffs are inspectable.
                    every site into a ranked shortlist.
 
 This reuses everything already built: the MCP tools and helpers in
-course_server.py, the retrieval in retrieval.py, and the reasoning in
+forecaster_server.py, the retrieval in retrieval.py, and the reasoning in
 reasoning.py. Coordination is the new idea here, not new domain logic.
 
 The Critic is deliberately a separate role. A generator that also grades its
@@ -28,7 +28,7 @@ is the natural place the guardrails (Task 9) and the human-review gate
 Run standalone:  python agents.py
 """
 
-import course_server as srv     # reuse the MCP tools + helpers (M1-4)
+import forecaster_server as srv     # reuse the MCP tools + helpers (M1-4)
 import reasoning                 # Tree-of-Thoughts (M4)
 import guardrails                # hard output rules + escalation (M6)
 

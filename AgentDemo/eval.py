@@ -25,7 +25,7 @@ import csv
 import sys
 from pathlib import Path
 
-import course_server as srv
+import forecaster_server as srv
 import guardrails
 import agents
 
